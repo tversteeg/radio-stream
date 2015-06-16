@@ -16,14 +16,13 @@
 
 int parseInput(int fd)
 {
-	fcntl(fd, F_SETFL, fcntl(fd,F_GETFL) | O_NONBLOCK);
-
 	size_t bufsize = CHUNK_SIZE;
 	char *buf = (char*)malloc(bufsize);
 
 	struct timeval begin;
 	gettimeofday(&begin, NULL);
 
+	// Receive the send message and store it
 	size_t size = 0;
 	while(1){
 		struct timeval now;
@@ -63,13 +62,15 @@ int parseInput(int fd)
 	int seq;
 	sscanf(buf + pos + sizeof("Cseq:"), "%d", &seq);
 
-	// Open socket as write file
+	printf("%s\n", buf);
+	// Send reply
 	FILE *tcpwrite = fdopen(fd, "w");
 	if(strncmp(buf, "OPTIONS", 4) == 0){
-		fprintf(tcpwrite, "RTSP/1.0 200 OK\r\nCSeq: %d\r\nPublic: OPTIONS, DESCRIBE, SETUP, TEARDOWN, PLAY, PAUSE\r\n\r\n", seq);
+		fprintf(tcpwrite, "RTSP/1.0 200 OK\r\nCSeq: %d\r\nPublic: DESCRIBE, SETUP, TEARDOWN, PLAY, PAUSE\r\n\r\n", seq);
 		printf("Send back response to OPTIONS\n");
 	}else if(strncmp(buf, "DESCRIBE", 4) == 0){
 		fprintf(tcpwrite, "RTSP/1.0 200 OK\r\nCSeq: %d\r\nContent-Type: application/sdp\r\nContent-Length: %d\r\n\r\n", seq, 0);
+		printf("Send back response to DESCRIBE\n");
 	}
 	fflush(tcpwrite);
 	fclose(tcpwrite);
@@ -132,19 +133,21 @@ int main(int argc, char *argv[])
 		goto error;
 	}
 
+	fcntl(fd, F_SETFL, fcntl(fd,F_GETFL) | O_NONBLOCK);
+
 	signal(SIGINT, stop);
 
 	while(1){
 		struct sockaddr_in cliaddr;
 		unsigned int clilen = sizeof(cliaddr);
 		childfd = accept(fd, (struct sockaddr*)&cliaddr, &clilen);
-		if(childfd < 0){
-			goto error;
+		if(childfd > 0){
+			fcntl(childfd, F_SETFL, fcntl(childfd,F_GETFL) | O_NONBLOCK);
+
+			while(parseInput(childfd));
+
+			close(childfd);
 		}
-
-		parseInput(childfd);
-
-		close(childfd);
 	}
 
 	close(fd);
