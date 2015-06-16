@@ -30,16 +30,14 @@ int parseInput(int fd)
 		double timediff = (now.tv_sec - begin.tv_sec) + 1e-6 * (now.tv_usec - begin.tv_usec);
 	
 		if((size > 0 && timediff > RECV_TIMEOUT) || timediff > RECV_TIMEOUT * 2){
-			printf("Time out on connection");
+			fprintf(stderr, "Time out on connection!\n");
 			return -1;
 		}
 
 		char data[CHUNK_SIZE];
 		int status = recv(fd, data, CHUNK_SIZE, 0);
-		if(status < 0){
+		if(status <= 0){
 			usleep(10000);
-		}else if(status == 0){
-			break;
 		}else{
 			if(size + status > bufsize){
 				bufsize <<= 1;
@@ -62,18 +60,19 @@ int parseInput(int fd)
 	int seq;
 	sscanf(buf + pos + sizeof("Cseq:"), "%d", &seq);
 
+#define SEND_MESSAGE(_m, _a...) \
+	char _b[sizeof(#_m) + 256];\
+	sprintf(_b, _m, ##_a); \
+	printf(_m, ##_a); \
+	write(fd, _b, strlen(_b));
+	
 	printf("%s\n", buf);
 	// Send reply
-	FILE *tcpwrite = fdopen(fd, "w");
 	if(strncmp(buf, "OPTIONS", 4) == 0){
-		fprintf(tcpwrite, "RTSP/1.0 200 OK\r\nCSeq: %d\r\nPublic: DESCRIBE, SETUP, TEARDOWN, PLAY, PAUSE\r\n\r\n", seq);
-		printf("Send back response to OPTIONS\n");
+		SEND_MESSAGE("RTSP/1.0 200 OK\r\nCSeq: %d\r\nPublic: DESCRIBE, SETUP, TEARDOWN, PLAY, PAUSE\r\n\r\n", seq);
 	}else if(strncmp(buf, "DESCRIBE", 4) == 0){
-		fprintf(tcpwrite, "RTSP/1.0 200 OK\r\nCSeq: %d\r\nContent-Type: application/sdp\r\nContent-Length: %d\r\n\r\n", seq, 0);
-		printf("Send back response to DESCRIBE\n");
+		SEND_MESSAGE("RTSP/1.0 200 OK\r\nCSeq: %d\r\nContent-Type: application/sdp\r\nContent-Length: %d\r\n\r\n", seq, 0);
 	}
-	fflush(tcpwrite);
-	fclose(tcpwrite);
 
 	return 0;
 }
@@ -133,7 +132,7 @@ int main(int argc, char *argv[])
 		goto error;
 	}
 
-	fcntl(fd, F_SETFL, fcntl(fd,F_GETFL) | O_NONBLOCK);
+	fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK);
 
 	signal(SIGINT, stop);
 
@@ -142,9 +141,9 @@ int main(int argc, char *argv[])
 		unsigned int clilen = sizeof(cliaddr);
 		childfd = accept(fd, (struct sockaddr*)&cliaddr, &clilen);
 		if(childfd > 0){
-			fcntl(childfd, F_SETFL, fcntl(childfd,F_GETFL) | O_NONBLOCK);
+			fcntl(childfd, F_SETFL, fcntl(childfd, F_GETFL) | O_NONBLOCK);
 
-			while(parseInput(childfd));
+			while(parseInput(childfd) != -1);
 
 			close(childfd);
 		}
@@ -155,6 +154,7 @@ int main(int argc, char *argv[])
 	return 0;
 
 error:
+	printf("Error!\n");
 	perror(NULL);
 
 	close(fd);
