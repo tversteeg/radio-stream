@@ -14,13 +14,9 @@
 #define SEND_TIMEOUT 10
 #define RECV_TIMEOUT 3
 
-#define RTSP_STATUS_200 "RTPS/1.0 200 OK\r\n"
-#define RTSP_STATUS_CSEQ "CSEQ: %d\r\n"
-#define RTSP_STATUS_OPTIONS "Public: OPTIONS, DESCRIBE, SETUP, TEARDOWN, PLAY, PAUSE\r\n"
-
 int parseInput(int fd)
 {
-	fcntl(fd, F_SETFL, O_NONBLOCK);
+	fcntl(fd, F_SETFL, fcntl(fd,F_GETFL) | O_NONBLOCK);
 
 	size_t bufsize = CHUNK_SIZE;
 	char *buf = (char*)malloc(bufsize);
@@ -61,7 +57,22 @@ int parseInput(int fd)
 		}
 	}
 
-	printf("%s\n", buf);
+	// Find sequence ID
+	int pos = 0;
+	while(buf[++pos] != '\n');
+	int seq;
+	sscanf(buf + pos + sizeof("Cseq:"), "%d", &seq);
+
+	// Open socket as write file
+	FILE *tcpwrite = fdopen(fd, "w");
+	if(strncmp(buf, "OPTIONS", 4) == 0){
+		fprintf(tcpwrite, "RTSP/1.0 200 OK\r\nCSeq: %d\r\nPublic: OPTIONS, DESCRIBE, SETUP, TEARDOWN, PLAY, PAUSE\r\n\r\n", seq);
+		printf("Send back response to OPTIONS\n");
+	}else if(strncmp(buf, "DESCRIBE", 4) == 0){
+		fprintf(tcpwrite, "RTSP/1.0 200 OK\r\nCSeq: %d\r\nContent-Type: application/sdp\r\nContent-Length: %d\r\n\r\n", seq, 0);
+	}
+	fflush(tcpwrite);
+	fclose(tcpwrite);
 
 	return 0;
 }
@@ -147,4 +158,3 @@ error:
 	close(childfd);
 	return 1;
 }
-
