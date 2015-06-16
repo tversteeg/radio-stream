@@ -4,6 +4,7 @@
 #include <signal.h>
 
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <netinet/in.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -11,10 +12,59 @@
 #define MAX_CONNECTIONS 100
 #define CHUNK_SIZE 256
 #define SEND_TIMEOUT 10
+#define RECV_TIMEOUT 3
 
 #define RTSP_STATUS_200 "RTPS/1.0 200 OK\r\n"
 #define RTSP_STATUS_CSEQ "CSEQ: %d\r\n"
-#define RTSP_STATUS_OPTIONS "Public: DESCRIBE, SETUP, TEARDOWN, PLAY, PAUSE\r\n"
+#define RTSP_STATUS_OPTIONS "Public: OPTIONS, DESCRIBE, SETUP, TEARDOWN, PLAY, PAUSE\r\n"
+
+int parseInput(int fd)
+{
+	fcntl(fd, F_SETFL, O_NONBLOCK);
+
+	size_t bufsize = CHUNK_SIZE;
+	char *buf = (char*)malloc(bufsize);
+
+	struct timeval begin;
+	gettimeofday(&begin, NULL);
+
+	size_t size = 0;
+	while(1){
+		struct timeval now;
+		gettimeofday(&now, NULL);
+		double timediff = (now.tv_sec - begin.tv_sec) + 1e-6 * (now.tv_usec - begin.tv_usec);
+	
+		if((size > 0 && timediff > RECV_TIMEOUT) || timediff > RECV_TIMEOUT * 2){
+			printf("Time out on connection");
+			return -1;
+		}
+
+		char data[CHUNK_SIZE];
+		int status = recv(fd, data, CHUNK_SIZE, 0);
+		if(status < 0){
+			usleep(10000);
+		}else if(status == 0){
+			break;
+		}else{
+			if(size + status > bufsize){
+				bufsize <<= 1;
+				buf = (char*)realloc(buf, bufsize);
+			}
+			memcpy(buf + size, data, status);
+			size += status;
+
+			gettimeofday(&begin, NULL);
+
+			if(status < CHUNK_SIZE){
+				break;
+			}
+		}
+	}
+
+	printf("%s\n", buf);
+
+	return 0;
+}
 
 int port, fd, childfd;
 
@@ -81,30 +131,7 @@ int main(int argc, char *argv[])
 			goto error;
 		}
 
-		fcntl(childfd, F_SETFL, O_NONBLOCK);
-		while(1){
-			char data[CHUNK_SIZE];
-			int status = recv(childfd, data, CHUNK_SIZE, 0);
-			if(status < 0){
-				usleep(10000);
-			}else if(status > 0){
-				data[status] = '\0';
-				printf("%s", data);
-
-				if(status < CHUNK_SIZE){
-					// Received full message
-					char options[1024];
-					int optsize = sprintf(options, RTSP_STATUS_200 RTSP_STATUS_CSEQ RTSP_STATUS_OPTIONS, 1);
-					if(write(childfd, options, optsize) != optsize){
-						goto error;
-					}
-					
-					break;
-				}
-			}
-		}
-
-		fcntl(childfd, F_SETFL, fcntl(childfd, F_GETFL) & ~O_NONBLOCK);
+		parseInput(childfd);
 
 		close(childfd);
 	}
@@ -120,3 +147,4 @@ error:
 	close(childfd);
 	return 1;
 }
+
