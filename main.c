@@ -71,7 +71,16 @@ int parseInput(int fd)
 	if(strncmp(buf, "OPTIONS", 4) == 0){
 		SEND_MESSAGE("RTSP/1.0 200 OK\r\nCSeq: %d\r\nPublic: DESCRIBE, SETUP, TEARDOWN, PLAY, PAUSE\r\n\r\n", seq);
 	}else if(strncmp(buf, "DESCRIBE", 4) == 0){
-		SEND_MESSAGE("RTSP/1.0 200 OK\r\nCSeq: %d\r\nContent-Type: application/sdp\r\nContent-Length: %d\r\n\r\n", seq, 0);
+		const char description[] = "v=0\r\n"
+			"i=Test server\r\n"
+			"m=audio 0 RTP/AVP 97\r\n"
+			"a=control:streamid=1\r\n"
+			"a=range:-1\r\n"
+			"a=length:-1";
+
+		SEND_MESSAGE("RTSP/1.0 200 OK\r\nCSeq: %d\r\nContent-Type: application/sdp\r\nContent-Length: %d\r\n\r\n%s", seq, (int)strlen(description), description);
+	}else if(strncmp(buf, "SETUP", 4) == 0){
+		SEND_MESSAGE("RTSP/10. 200 OK\r\nCseq: %d\r\nTransport: RTP/AVP;unicast;client_port=4588-4589;server_port=6256-6257\r\n\r\n", seq);
 	}
 
 	return 0;
