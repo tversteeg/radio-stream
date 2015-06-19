@@ -73,10 +73,16 @@ int parseInput(int fd)
 	}else if(strncmp(buf, "DESCRIBE", 4) == 0){
 		const char description[] = "v=0\r\n"
 			"i=Test server\r\n"
-			"m=audio 0 RTP/AVP 97\r\n"
-			"a=control:streamid=1\r\n"
-			"a=range:-1\r\n"
-			"a=length:-1";
+			"a=recvonly\r\n"
+			"a=type:broadcast\r\n"
+			"m=audio 0 RTP/AVP 14\r\n"
+			"b=AS:320\r\n"
+			"b=RR:0\r\n"
+			"a=rtpmap:14 MPA/90000/2\r\n"
+//			"a=control:streamid=1\r\n"
+//			"a=range:-1\r\n"
+//			"a=length:-1\r\n";
+			;
 
 		SEND_MESSAGE("RTSP/1.0 200 OK\r\nCSeq: %d\r\nContent-Type: application/sdp\r\nContent-Length: %d\r\n\r\n%s", seq, (int)strlen(description), description);
 	}else if(strncmp(buf, "SETUP", 4) == 0){
